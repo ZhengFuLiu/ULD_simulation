@@ -87,8 +87,11 @@ def main_page():
                 cols = st.columns(6)
                 # Slicing the list to get up to 10 items for the current row
                 for idx, item in enumerate(item_list[i*6:(i+1)*6]):
-                    a = cols[idx].checkbox(item[0], value=True)
-                    items.append(a)
+                    try:
+                        a = cols[idx].checkbox(item[0], value=True)
+                        items.append(a)
+                    except:
+                        st.error("請清除貨品列表再重新新增", icon="🚨")
             return items
     # 主頁設定
     st.title('📦築打模擬系統')
@@ -134,6 +137,7 @@ def main_page():
             auto_pack_items(filtered_list)
         except:
             st.error("輸入物品尺寸超出限制範圍，貨櫃尺寸:(10,10,10,限重50)", icon="🚨")
+        
 
 if __name__ == "__main__":
     # 網頁資訊
