@@ -130,9 +130,10 @@ def main_page():
     # 使用自動裝箱函數
     if len(st.session_state['items']) > 0:
         filtered_list = [item for item, include in zip(st.session_state['items'], items) if include]
-        auto_pack_items(filtered_list)
-        # except:
-        #     st.error("輸入物品尺寸超出限制範圍", icon="🚨")
+        try:
+            auto_pack_items(filtered_list)
+        except:
+            st.error("輸入物品尺寸超出限制範圍，貨櫃尺寸:(10*10*10,限重50)", icon="🚨")
 
 if __name__ == "__main__":
     # 網頁資訊
