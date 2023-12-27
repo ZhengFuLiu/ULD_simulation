@@ -6,7 +6,7 @@ from matplotlib.patches import Rectangle,Circle
 import matplotlib.pyplot as plt
 import os
 import matplotlib
-myfont = matplotlib.font_manager.FontProperties(fname=f'{os.path.abspath(os.getcwd())}\\py3dbp\\SimHei.ttf')
+myfont = matplotlib.font_manager.FontProperties(fname=f'{os.path.abspath(os.getcwd())}/SimHei.ttf')
 import mpl_toolkits.mplot3d.art3d as art3d
 from collections import Counter
 import copy
