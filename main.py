@@ -192,10 +192,10 @@ def main_page():
 
     # Display current items and allow selection for packing
     selected_items = display_items(st.session_state['items'])
-
+    
     # Execute auto-packing function with selected items
     if len(st.session_state['items']) > 0:
-        filtered_list = [item for item, include in zip(st.session_state['items'], selected_items) if include]
+        filtered_list = [item for item in st.session_state['items'] if item[0] in selected_items]
         auto_pack_items(filtered_list, bin_limits)
         
 
