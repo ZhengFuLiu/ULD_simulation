@@ -1,31 +1,44 @@
 from py3dbp import Packer, Bin, Item, Painter
 import streamlit as st
 
-def auto_pack_items(items):
+def auto_pack_items(items, bin_limits):
     """
-    自動裝箱函數
-    :param items: 用戶自行輸入尺寸表，包含長寬高與重量
-    :return: 裝箱後結果
+    Automatically pack items into bins.
+    
+    :param items: List of user-inputted items, each with name, length, width, height, and weight.
+    :param bin_limits: Tuple containing the bin's dimensions (length, width, height) and weight limit.
+    :return: None. The function directly visualizes and displays the packing results in the Streamlit app.
     """
-    # 箱子尺寸與承重
-    bin_length, bin_width, bin_height, bin_weight_limit = 10, 10, 10, 50
-    # 初始化未裝箱的貨品
+    # Unpack bin dimensions and weight limit
+    (bin_length, bin_width, bin_height, bin_weight_limit) = bin_limits
+
+    # Copy items to track those that are not yet packed
     unfit_items = items[:]
     bin_count = 0
-    # 若有未裝箱，則新增一個箱子
+
+    # Continue adding bins until all items are packed
     while unfit_items:
-        # 建立Packer
         packer = Packer()
-        # 新增箱子
+
+        # Increment bin count and add new bins
         bin_count += 1
         for count in range(1, bin_count+1):
             new_bin = Bin(f'貨櫃-{count}', (bin_length, bin_width, bin_height), bin_weight_limit, 0, 0)
             packer.addBin(new_bin)
-        # 嘗試裝箱
-        for item_name, item_length, item_width, item_height, item_weight in items:
-            packer.addItem(Item(partno=item_name, name=item_name, typeof='cube', WHD=(item_length, item_width, item_height), weight=item_weight,
-                                level=1, loadbear=100, updown=True, color='olive'))
-        # 執行裝箱演算法
+
+        # Add items to the packer
+        for item_name, item_length, item_width, item_height, item_weight, item_loadbear, item_updown, item_level in items:
+            if item_level == "優先":
+                packer.addItem(Item(partno=item_name, name=item_name, typeof='cube', WHD=(item_length, item_width, item_height), weight=item_weight,
+                                    level=1, loadbear=((item_loadbear == "是") and 100 or 1), updown=((item_updown == "是") and True or False), color='brown'))
+            elif item_level == "普通":
+                packer.addItem(Item(partno=item_name, name=item_name, typeof='cube', WHD=(item_length, item_width, item_height), weight=item_weight,
+                                    level=2, loadbear=((item_loadbear == "是") and 100 or 1), updown=((item_updown == "是") and True or False), color='yellow'))
+            else:
+                packer.addItem(Item(partno=item_name, name=item_name, typeof='cube', WHD=(item_length, item_width, item_height), weight=item_weight,
+                                    level=3, loadbear=((item_loadbear == "是") and 100 or 1), updown=((item_updown == "是") and True or False), color='olive'))
+        
+        # Execute packing algorithm with specified parameters
         packer.pack(
             bigger_first=True,
             distribute_items=True,
@@ -34,113 +47,161 @@ def auto_pack_items(items):
             support_surface_ratio=0.75,
             number_of_decimals=0
         )
-        # put order
-        packer.putOrder()
-        # 更新未裝箱的物品
+
+        # Update the list of items that are still unfit
         unfit_items = [(item.name, item.width, item.height, item.depth, item.weight) for item in packer.unfit_items]
-    #輸出結果
-    for b in packer.bins:
-        volume = b.width * b.height * b.depth
-        volume_t = 0
-        # 輸出圖例
-        painter = Painter(b)
-        fig = painter.plotBoxAndItems(
-            title=b.partno,
-            alpha=0.2,
-            write_num=True,
-            fontsize=10
-        )
-        st.pyplot(fig)
-        # 顯示裝入箱子中的貨品
-        st.caption(b.string())
-        for item in b.items:
-            st.text(f"貨物：{item.partno}  位置：{item.position}  旋轉：{item.rotation_type}")
-            volume_t += float(item.width) * float(item.height) * float(item.depth)
-        st.text('空間使用率 : {}%'.format(round(volume_t / float(volume) * 100 ,2)))
+
+        # Arrange items in the order of packing
+        packer.putOrder()
+
+    if len(items) > 0:
+        # Visualize and display results for each bin
+        for b in packer.bins:
+            # Calculate the total volume of the bin
+            volume = b.width * b.height * b.depth
+            volume_t = 0
+            
+            # Create a visual representation of the bin and its contents
+            painter = Painter(b)
+            fig = painter.plotBoxAndItems(
+                title=b.partno,
+                alpha=0.2,
+                write_num=True,
+                fontsize=10
+            )
+            st.pyplot(fig)
+
+            # Display details about the packed items in the bin
+            st.caption(b.string())
+            for item in b.items:
+                st.text(f"貨物：{item.partno}  位置：{item.position}  旋轉：{item.rotation_type}")
+                volume_t += float(item.width) * float(item.height) * float(item.depth)
+            
+            # Calculate and display the space utilization rate
+            st.text('空間使用率 : {}%'.format(round(volume_t / float(volume) * 100 ,2)))
+
+def add_item(name, length, width, height, weight, loadbear, updown, level):
+    """ Add an item to the list. """
+    return name, length, width, height, weight, loadbear, updown, level
+
+def display_items(item_list):
+    """ Display input items and allow selection for packing. """
+    if not item_list:
+        st.success("No items to display.", icon="✅")
+        return []
+    else:
+        # Extract item names for the multiselect options
+        item_names = [item[0] for item in item_list]
+
+        # Create a multiselect widget for item selection
+        selected_items = st.multiselect("選擇要裝箱的貨物", item_names, item_names)
+        return selected_items 
+
+def is_valid_item(item, bin_limits):
+    """
+    Check if the item is valid based on bin limits.
+    :param item: Tuple containing the item's dimensions and weight.
+    :param bin_limits: Tuple containing the bin's dimensions and weight limit.
+    :return: Boolean indicating whether the item is valid.
+    """
+    _, item_length, item_width, item_height, item_weight, loadbear, updown, level = item
+    bin_length, bin_width, bin_height, bin_weight_limit = bin_limits
+    return all([
+        float(item_length) <= float(bin_length),
+        float(item_width) <= float(bin_width),
+        float(item_height) <= float(bin_height),
+        float(item_weight) <= float(bin_weight_limit)
+    ])
 
 def page_config():
-    #網頁呈現資訊
+    """
+    Configure the Streamlit page settings.
+    """
+
+    # Set up the configuration of the Streamlit page
     st.set_page_config(
-        page_title="Axon",
-        page_icon="🚜",
-        initial_sidebar_state="auto",
+        page_title="Axon", # Title of the page, displayed in the browser tab
+        page_icon="🚜",    # Icon (emoji or image) displayed in the browser tab
+        initial_sidebar_state="auto",  # Default state of the sidebar ('auto', 'expanded', 'collapsed')
         menu_items={
-            'About': "築打模擬系統"
+            'About': "築打模擬系統"  # Custom text for the 'About' menu item
         } 
     )
 
 def main_page():
-    # 新增函數
-    def add_item(name, length, width, height, weight):
-        """ Add an item to the list. """
-        return name, length, width, height, weight
-    # 一鍵清空
-    def display_items(item_list):
-        """ Display items in the list in a grid layout. """
-        items = []
-        if not item_list:
-            st.success("No items to display.", icon="✅")
-            return items
-        else:
-            for i in range(len(item_list) // 6 + (1 if len(item_list) % 6 != 0 else 0)):
-                # Creating 10 columns for each row
-                cols = st.columns(6)
-                # Slicing the list to get up to 10 items for the current row
-                for idx, item in enumerate(item_list[i*6:(i+1)*6]):
-                    try:
-                        a = cols[idx].checkbox(item[0], value=True)
-                        items.append(a)
-                    except:
-                        st.error("請清除貨品列表再重新新增", icon="🚨")
-            return items
-    # 主頁設定
+    # Set up the main page layout and titles
     st.title('📦築打模擬系統')
     st.subheader('🎁自行輸入貨物資訊')
     st.subheader('🎁一鍵模擬自動裝箱與輸出展示圖')
     st.subheader('🎁考量貨物穩定度與優先權，並最大化空間使用率')
-    st.markdown('#')
-    # 新增貨物列表狀態
+    st.markdown('#')  # Adds a visual separator
+    
+    # Initialize or retrieve the list of items from the session state
     if 'items' not in st.session_state:
         st.session_state['items'] = []
-    # 初始化輸入貨物
-    labels = ['貨物名稱', '長度(m)', '寬度(m)', '高度(m)', '重量(kg)']
+    
+    # Define bin dimensions and weight limit
+    bin_limits = (10, 10, 10, 50)
+
+    # Initialize input labels and values in the session state
+    labels = ['貨物名稱', '長度(m)', '寬度(m)', '高度(m)', '重量(kg)', '可壓', '可倒放', '優先權']
     for label in labels:
         if label not in st.session_state:
             st.session_state[label] = ''
-    # 區塊顯示
+    
+    # Input section for item dimensions and weight
     with st.container():
-        col_layout = st.columns(5)
-        # 輸入尺寸與重量
-        item_details = [col.text_input(label, st.session_state[label]) for col, label in zip(col_layout, labels)]
-        # 顯示輸入資訊
+        col_layout = st.columns(8)
+        item_details = [col.text_input(label, st.session_state[label]) for col, label in zip(col_layout[:5], labels[:5])]
+        item_details.append(col_layout[5].radio(labels[5], ["是", "否"]))
+        item_details.append(col_layout[6].radio(labels[6], ["是", "否"]))
+        item_details.append(col_layout[7].select_slider(labels[7], options=['稍後', '普通', '優先'], value='普通'))
         item_info = '  '.join([f'{label}：{detail}' for label, detail in zip(labels, item_details)])
         st.text(item_info)
-        # 新增鍵與刪除鍵
+
+        # Buttons for adding new items and clearing the list
         butt1, butt2 = st.columns(9)[7:]
         add = butt1.button("新增", type="primary")
         delete = butt2.button("清除")
-    # 新增貨物
+
+    # Handling the addition of new items
     if add:
-        st.session_state['items'].append(add_item(*item_details))
-        for label in labels:
-            st.session_state[label] = ''
-    # 刪除列表
+        # Validate and add items to the list
+        try:
+            _ = [float(i) for i in item_details[1:5]]  # Check if dimensions and weight are numeric
+            new_item = add_item(*item_details)
+
+            # Validate the new item's dimensions and check for duplicate names
+            if is_valid_item(new_item, bin_limits):
+                # Check for duplicate names
+                if any(item[0] == new_item[0] for item in st.session_state['items']):
+                    st.error("相同名稱已存在，請更改名稱再重新新增", icon="🚨")
+                else:
+                    st.session_state['items'].append(new_item)
+                    # Clear input fields after successful addition
+                    for label in labels:
+                        st.session_state[label] = ''
+            else:
+                st.error("新增的物品尺寸或重量超出貨櫃限制，貨櫃尺寸:(10x10x10,限重50)。", icon="🚨")
+        except ValueError:
+            st.error("請輸入數字。", icon="🚨")
+    
+    # Handling the clearing of the item list
     if delete:
         st.session_state['items'].clear()
-    # 顯示目前貨物
-    items = display_items(st.session_state['items'])
-    
-    # 使用自動裝箱函數
+
+    # Display current items and allow selection for packing
+    selected_items = display_items(st.session_state['items'])
+
+    # Execute auto-packing function with selected items
     if len(st.session_state['items']) > 0:
-        filtered_list = [item for item, include in zip(st.session_state['items'], items) if include]
-        try:
-            auto_pack_items(filtered_list)
-        except:
-            st.error("輸入物品尺寸超出限制範圍，貨櫃尺寸:(10,10,10,限重50)", icon="🚨")
+        filtered_list = [item for item, include in zip(st.session_state['items'], selected_items) if include]
+        auto_pack_items(filtered_list, bin_limits)
         
 
 if __name__ == "__main__":
-    # 網頁資訊
+    # Configure the web page's appearance and settings
     page_config()
-    # 主頁
+
+    # Display the main page content
     main_page()
