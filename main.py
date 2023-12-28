@@ -10,7 +10,7 @@ def auto_pack_items(items, bin_limits):
     :return: None. The function directly visualizes and displays the packing results in the Streamlit app.
     """
     # Unpack bin dimensions and weight limit
-    (bin_length, bin_width, bin_height, bin_weight_limit) = bin_limits
+    bin_length, bin_width, bin_height, bin_weight_limit = bin_limits
 
     # Copy items to track those that are not yet packed
     unfit_items = items[:]
@@ -26,18 +26,14 @@ def auto_pack_items(items, bin_limits):
             new_bin = Bin(f'貨櫃-{count}', (bin_length, bin_width, bin_height), bin_weight_limit, 0, 0)
             packer.addBin(new_bin)
 
-        # Add items to the packer
-        for item_name, item_length, item_width, item_height, item_weight, item_loadbear, item_updown, item_level in items:
-            if item_level == "優先":
-                packer.addItem(Item(partno=item_name, name=item_name, typeof='cube', WHD=(item_length, item_width, item_height), weight=item_weight,
-                                    level=1, loadbear=((item_loadbear == "是") and 100 or 1), updown=((item_updown == "是") and True or False), color='brown'))
-            elif item_level == "普通":
-                packer.addItem(Item(partno=item_name, name=item_name, typeof='cube', WHD=(item_length, item_width, item_height), weight=item_weight,
-                                    level=2, loadbear=((item_loadbear == "是") and 100 or 1), updown=((item_updown == "是") and True or False), color='yellow'))
-            else:
-                packer.addItem(Item(partno=item_name, name=item_name, typeof='cube', WHD=(item_length, item_width, item_height), weight=item_weight,
-                                    level=3, loadbear=((item_loadbear == "是") and 100 or 1), updown=((item_updown == "是") and True or False), color='olive'))
-        
+        # Define color mapping for item levels
+        color_map = {'優先': 'brown', '普通': 'yellow', '非優先': 'olive'}
+
+        # Add items to the packer with conditional attributes
+        for item in items:
+            item_name, item_length, item_width, item_height, item_weight, item_loadbear, item_updown, item_level = item
+            packer.addItem(Item(partno=item_name, name=item_name, typeof='cube', WHD=(item_length, item_width, item_height), weight=item_weight,
+                                level={'優先': 1, '普通': 2, '非優先': 3}[item_level], loadbear=((item_loadbear == "是") and 300 or 1), updown=((item_updown == "是") and True or False), color=color_map.get(item_level)))
         # Execute packing algorithm with specified parameters
         packer.pack(
             bigger_first=True,
@@ -89,13 +85,11 @@ def display_items(item_list):
     if not item_list:
         st.success("No items to display.", icon="✅")
         return []
-    else:
-        # Extract item names for the multiselect options
-        item_names = [item[0] for item in item_list]
 
-        # Create a multiselect widget for item selection
-        selected_items = st.multiselect("選擇要裝箱的貨物", item_names, item_names)
-        return selected_items 
+    item_strings = [f'{item[0]}-{item[1]}*{item[2]}*{item[3]}, 重量:{item[4]}' for item in item_list]
+    # Create a multiselect widget for item selection
+    selected_items = st.multiselect("選擇要裝箱的貨物", item_strings, item_strings)
+    return selected_items 
 
 def is_valid_item(item, bin_limits):
     """
@@ -104,7 +98,7 @@ def is_valid_item(item, bin_limits):
     :param bin_limits: Tuple containing the bin's dimensions and weight limit.
     :return: Boolean indicating whether the item is valid.
     """
-    _, item_length, item_width, item_height, item_weight, loadbear, updown, level = item
+    _, item_length, item_width, item_height, item_weight = item[:5]
     bin_length, bin_width, bin_height, bin_weight_limit = bin_limits
     return all([
         float(item_length) <= float(bin_length),
@@ -131,7 +125,7 @@ def page_config():
 def main_page():
     # Set up the main page layout and titles
     st.title('📦築打模擬系統')
-    st.subheader('🎁自行輸入貨物資訊')
+    st.subheader('🎁自行輸入貨物資訊與盤型限制')
     st.subheader('🎁一鍵模擬自動裝箱與輸出展示圖')
     st.subheader('🎁考量貨物穩定度與優先權，並最大化空間使用率')
     st.markdown('#')  # Adds a visual separator
@@ -139,30 +133,40 @@ def main_page():
     # Initialize or retrieve the list of items from the session state
     if 'items' not in st.session_state:
         st.session_state['items'] = []
-    
+
     # Define bin dimensions and weight limit
-    bin_limits = (10, 10, 10, 50)
+    bin_layout = st.columns(4)
+    bin_labels = ['盤型限長(m)', '盤型限寬(m)', '盤型限高(m)', '盤型限重(g)']
 
     # Initialize input labels and values in the session state
-    labels = ['貨物名稱', '長度(m)', '寬度(m)', '高度(m)', '重量(kg)', '可壓', '可倒放', '優先權']
+    labels = ['貨物名稱', '長度(m)', '寬度(m)', '高度(m)', '重量(g)', '可壓', '可倒放', '優先權']
     for label in labels:
         if label not in st.session_state:
             st.session_state[label] = ''
+    for label in bin_labels:
+        if label not in st.session_state:
+            st.session_state[label] = ''
     
+    bin_limits = [col.number_input(label) for col, label in zip(bin_layout, bin_labels)]
+    button = st.columns(6)[-1]
+    act = button.button("生成盤型")
+
     # Input section for item dimensions and weight
     with st.container():
-        col_layout = st.columns(8)
-        item_details = [col.text_input(label, st.session_state[label]) for col, label in zip(col_layout[:5], labels[:5])]
-        item_details.append(col_layout[5].radio(labels[5], ["是", "否"]))
-        item_details.append(col_layout[6].radio(labels[6], ["是", "否"]))
-        item_details.append(col_layout[7].select_slider(labels[7], options=['稍後', '普通', '優先'], value='普通'))
-        item_info = '  '.join([f'{label}：{detail}' for label, detail in zip(labels, item_details)])
-        st.text(item_info)
+        col_layout = st.columns(5)
+        item_details = [col_layout[0].text_input(labels[0], st.session_state[labels[0]])]
+        item_details = [*item_details, *[col.number_input(label) for col, label in zip(col_layout[1:5], labels[1:5])]]
+        
+        twice_col = st.columns(3)
+        item_details.append(twice_col[0].radio(labels[5], ["是", "否"], horizontal=True))
+        item_details.append(twice_col[1].radio(labels[6], ["是", "否"], horizontal=True))
+        item_details.append(twice_col[2].select_slider(labels[7], options=['非優先', '普通', '優先'], value='普通'))
 
         # Buttons for adding new items and clearing the list
         butt1, butt2 = st.columns(9)[7:]
         add = butt1.button("新增", type="primary")
         delete = butt2.button("清除")
+        st.write("---")
 
     # Handling the addition of new items
     if add:
@@ -182,17 +186,37 @@ def main_page():
                     for label in labels:
                         st.session_state[label] = ''
             else:
-                st.error("新增的物品尺寸或重量超出貨櫃限制，貨櫃尺寸:(10x10x10,限重50)。", icon="🚨")
+                st.error(f"新增的物品尺寸或重量超出貨櫃限制，貨櫃尺寸:({bin_limits[0]}x{bin_limits[1]}x{bin_limits[2]}, 限重：{bin_limits[3]})。", icon="🚨")
         except ValueError:
             st.error("請輸入數字。", icon="🚨")
     
     # Handling the clearing of the item list
     if delete:
-        st.session_state['items'].clear()
+        st.session_state['items'] = []
 
     # Display current items and allow selection for packing
-    selected_items = display_items(st.session_state['items'])
-    
+    selected_items = [item_name.split("-")[0] for item_name in display_items(st.session_state['items'])]
+
+    if act:
+        packer = Packer()
+        new_bin = Bin(f'盤型', (bin_limits[0], bin_limits[1], bin_limits[2]), bin_limits[3], 0, 0)
+        packer.addBin(new_bin)
+        
+        for b in packer.bins:
+            # Calculate the total volume of the bin
+            volume = b.width * b.height * b.depth
+            volume_t = 0
+            
+            # Create a visual representation of the bin and its contents
+            painter = Painter(b)
+            fig = painter.plotBoxAndItems(
+                title=b.partno,
+                alpha=0.2,
+                write_num=True,
+                fontsize=10
+            )
+            st.pyplot(fig)
+
     # Execute auto-packing function with selected items
     if len(st.session_state['items']) > 0:
         filtered_list = [item for item in st.session_state['items'] if item[0] in selected_items]
